@@ -58,8 +58,9 @@
 - Do not add a config file; it breaks the v4 build
 
 **Zustand store**
-- Client UI state only — filter and editingId
+- Client UI state only — `filter`, `editingId`, `searchQuery`, `sortOrder`
 - Do not store server data (todos) in Zustand; that comes from RSC page props
+- Export shared types from the store (e.g. `SortOrder`) for use in consumer components
 
 ---
 

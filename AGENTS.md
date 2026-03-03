@@ -13,7 +13,7 @@
 | Styling | Tailwind CSS v4 | CSS-first (`@theme` in `globals.css`) — no `tailwind.config.js` |
 | Components | shadcn/ui (new-york style) | Copy-paste ownership via `src/components/ui/` |
 | Animation | Framer Motion 12.x | `LazyMotion` + `domAnimation` for bundle efficiency |
-| Client state | Zustand 5.x | Filter + editing state only |
+| Client state | Zustand 5.x | Filter, search, sort, and editing state |
 | Database (dev) | SQLite (`file:./local.db`) | Zero config, `drizzle-kit push` to create |
 | Database (prod) | Turso (libSQL) | SQLite-compatible, works on Vercel serverless |
 | ORM | Drizzle ORM | Lightweight, type-safe, Edge-compatible |
@@ -31,10 +31,11 @@ src/
 │   ├── page.tsx            # Main page (RSC) — DB query, glassmorphism container
 │   └── globals.css         # Tailwind v4 @theme tokens, OKLCH palette, glassmorphism base
 ├── components/
-│   ├── todo-list.tsx       # Client — LazyMotion provider, AnimatePresence, filter logic
+│   ├── todo-list.tsx       # Client — LazyMotion provider, AnimatePresence, three-step filter/search/sort pipeline
 │   ├── todo-item.tsx       # Client — checkbox bounce, strikethrough, inline edit, due date
 │   ├── todo-form.tsx       # Client — create todo, datetime-local picker, keyboard shortcuts (n / Enter / Esc)
 │   ├── filter-tabs.tsx     # Client — shadcn Tabs, count badges, Zustand filter
+│   ├── search-sort-bar.tsx # Client — search input (glass-surface, clear button) + sort cycle button
 │   ├── theme-toggle.tsx    # Client — useTheme, mounted guard, Sun/Moon icons
 │   └── ui/                 # shadcn/ui primitives (button, checkbox, dialog, input, tabs)
 ├── lib/
@@ -44,7 +45,7 @@ src/
 ├── actions/
 │   └── todos.ts            # Server Actions — createTodo, toggleTodo, updateTodo, deleteTodo
 └── store/
-    └── ui.ts               # Zustand store — filter ('all'|'active'|'completed') + editingId
+    └── ui.ts               # Zustand store — filter, searchQuery, sortOrder, editingId
 ```
 
 ---
@@ -83,13 +84,17 @@ All mutations use `revalidatePath('/')` to trigger RSC re-render.
 ## Client State (`src/store/ui.ts`)
 
 ```ts
+export type SortOrder = 'created_desc' | 'due_asc' | 'due_desc'
+
 useUIStore {
-  filter:     'all' | 'active' | 'completed'   // drives TodoList filtering
-  editingId:  number | null                     // which TodoItem is in inline-edit mode
+  filter:       'all' | 'active' | 'completed'   // drives completion filter in TodoList
+  editingId:    number | null                     // which TodoItem is in inline-edit mode
+  searchQuery:  string                            // case-insensitive substring search on title (default '')
+  sortOrder:    SortOrder                         // client-side sort order (default 'created_desc')
 }
 ```
 
-Filtering is client-side only — `TodoList` filters `initialTodos` prop from the RSC page query.
+All filtering, searching, and sorting is client-side only — `TodoList` runs a three-step pipeline on the `initialTodos` prop from the RSC page query. `SortOrder` is exported for use in `SearchSortBar`.
 
 ---
 
@@ -132,6 +137,27 @@ const isCompleted = !!todo.completed
 completed: completed ? 1 : 0
 ```
 
+### Search + sort pipeline (TodoList)
+```ts
+// src/components/todo-list.tsx
+// Step 1: completion filter (existing, unchanged)
+const afterFilter = initialTodos.filter(todo => /* all | active | completed */)
+
+// Step 2: search filter — case-insensitive substring on title; skipped when empty
+const afterSearch = trimmedQuery
+  ? afterFilter.filter(todo => todo.title.toLowerCase().includes(trimmedQuery))
+  : afterFilter
+
+// Step 3: sort — ALWAYS spread to avoid mutating the prop
+const filteredTodos = [...afterSearch].sort((a, b) => {
+  if (sortOrder === 'created_desc') return 0  // fast-path: preserve DB order
+  // due_asc / due_desc: nulls always go to bottom regardless of direction
+})
+```
+
+- `created_desc` relies on `orderBy(desc(todos.created_at))` in `page.tsx` — do not change DB query
+- `AnimatePresence` key: `key={filter + searchQuery}` remounts empty state on either change
+
 ### Tailwind v4 note
 No `tailwind.config.js` — Tailwind v4 is CSS-first. All theme tokens live in `globals.css` under `@theme`. Do not create a config file; it breaks the v4 build.
 
@@ -149,6 +175,9 @@ No `tailwind.config.js` — Tailwind v4 is CSS-first. All theme tokens live in `
 | Checkbox animation | Scale bounce `[1, 1.4, 0.85, 1.1, 1]` over 400ms |
 | Strikethrough on complete | Animated `scaleX` 0→1 via `m.span` |
 | Delete animation | Exit: `opacity: 0, x: -40, height: 0` over 250ms |
+| SearchSortBar — search input | `glass-surface` class, `pl-8` for icon offset, clear `×` button (`variant="ghost" size="icon-xs"`) when non-empty |
+| SearchSortBar — sort button | Cycles `created_desc → due_asc → due_desc`; accent-violet border + text (`var(--color-spectrum-7)`) when sort is non-default |
+| Search empty state | `No todos match "<query>"` when `searchQuery` is non-empty; falls back to `EMPTY_STATE_COPY[filter]` |
 
 ---
 
@@ -232,30 +261,29 @@ This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_view
 bv
 
 # CLI commands for agents (use these instead)
-bd ready              # Show issues ready to work (no blockers)
-bd list --status=open # All open issues
-bd show <id>          # Full issue details with dependencies
-bd create --title="..." --type=task --priority=2
-bd update <id> --status=in_progress
-bd close <id> --reason="Completed"
-bd close <id1> <id2>  # Close multiple issues at once
-bd sync               # Commit and push changes
+br ready              # Show issues ready to work (no blockers)
+br list --status=open # All open issues
+br show <id>          # Full issue details with dependencies
+br create --title="..." --type=task --priority=2
+br update <id> --status=in_progress
+br close <id> --reason="Completed"
+br sync --flush-only  # Export JSONL (use before git commit)
 ```
 
 ### Workflow Pattern
 
-1. **Start**: Run `bd ready` to find actionable work
-2. **Claim**: Use `bd update <id> --status=in_progress`
+1. **Start**: Run `br ready` to find actionable work
+2. **Claim**: Use `br update <id> --status=in_progress`
 3. **Work**: Implement the task
-4. **Complete**: Use `bd close <id>`
-5. **Sync**: Always run `bd sync` at session end
+4. **Complete**: Use `br close <id>`
+5. **Sync**: Always run `br sync --flush-only` at session end
 
 ### Key Concepts
 
 - **Dependencies**: Issues can block other issues. `bd ready` shows only unblocked work.
 - **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers, not words)
 - **Types**: task, bug, feature, epic, question, docs
-- **Blocking**: `bd dep add <issue> <depends-on>` to add dependencies
+- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
 
 ### Session Protocol
 
@@ -264,18 +292,17 @@ bd sync               # Commit and push changes
 ```bash
 git status              # Check what changed
 git add <files>         # Stage code changes
-bd sync                 # Commit beads changes
-git commit -m "..."     # Commit code
-bd sync                 # Commit any new beads changes
+br sync --flush-only    # Export beads to JSONL
+git commit -m "..."     # Commit code + beads
 git push                # Push to remote
 ```
 
 ### Best Practices
 
-- Check `bd ready` at session start to find available work
+- Check `br ready` at session start to find available work
 - Update status as you work (in_progress → closed)
-- Create new issues with `bd create` when you discover tasks
+- Create new issues with `br create` when you discover tasks
 - Use descriptive titles and set appropriate priority/type
-- Always `bd sync` before ending session
+- Always `br sync --flush-only` before ending session
 
 <!-- end-bv-agent-instructions -->

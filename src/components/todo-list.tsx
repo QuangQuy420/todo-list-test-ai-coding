@@ -17,19 +17,47 @@ const EMPTY_STATE_COPY: Record<'all' | 'active' | 'completed', string> = {
 }
 
 export function TodoList({ initialTodos }: TodoListProps) {
-  const { filter } = useUIStore()
+  const { filter, searchQuery, sortOrder } = useUIStore()
 
-  const filteredTodos = initialTodos.filter((todo) => {
+  // Step 1: completion filter (unchanged)
+  const afterFilter = initialTodos.filter((todo) => {
     if (filter === 'active') return !todo.completed
     if (filter === 'completed') return !!todo.completed
     return true
   })
 
+  // Step 2: search filter (case-insensitive substring match on title)
+  const trimmedQuery = searchQuery.trim().toLowerCase()
+  const afterSearch = trimmedQuery
+    ? afterFilter.filter((todo) =>
+        todo.title.toLowerCase().includes(trimmedQuery)
+      )
+    : afterFilter
+
+  // Step 3: sort — always spread to avoid mutating the prop
+  const filteredTodos = [...afterSearch].sort((a, b) => {
+    if (sortOrder === 'created_desc') return 0 // preserve DB order (created_at DESC)
+
+    const aDate = a.due_date ? new Date(a.due_date).getTime() : null
+    const bDate = b.due_date ? new Date(b.due_date).getTime() : null
+
+    // Nulls always go to the bottom regardless of sort direction
+    if (aDate === null && bDate === null) return 0
+    if (aDate === null) return 1
+    if (bDate === null) return -1
+
+    return sortOrder === 'due_asc' ? aDate - bDate : bDate - aDate
+  })
+
+  const emptyMessage = trimmedQuery
+    ? `No todos match "${searchQuery}"`
+    : EMPTY_STATE_COPY[filter]
+
   if (filteredTodos.length === 0) {
     return (
       <LazyMotion features={domAnimation}>
         <m.div
-          key={filter}
+          key={filter + searchQuery}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 8 }}
@@ -38,7 +66,7 @@ export function TodoList({ initialTodos }: TodoListProps) {
         >
           <ClipboardList size={48} className="text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            {EMPTY_STATE_COPY[filter]}
+            {emptyMessage}
           </p>
         </m.div>
       </LazyMotion>
