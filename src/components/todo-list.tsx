@@ -16,11 +16,35 @@ const EMPTY_STATE_COPY: Record<'all' | 'active' | 'completed', string> = {
   completed: 'No completed todos yet',
 }
 
-export function TodoList({ initialTodos }: TodoListProps) {
-  const { filter, searchQuery, sortOrder } = useUIStore()
+function formatDateLabel(dateFilter: string): string {
+  if (dateFilter === 'today') {
+    return 'today'
+  }
+  try {
+    const [year, month, day] = dateFilter.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  } catch {
+    return dateFilter
+  }
+}
 
-  // Step 1: completion filter (unchanged)
-  const afterFilter = initialTodos.filter((todo) => {
+export function TodoList({ initialTodos }: TodoListProps) {
+  const { filter, searchQuery, sortOrder, dateFilter } = useUIStore()
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Step 0: date filter (before completion filter)
+  const afterDate = dateFilter === null
+    ? initialTodos
+    : initialTodos.filter((todo) => {
+        if (!todo.due_date) return false
+        const dueDatePart = todo.due_date.slice(0, 10) // "YYYY-MM-DD"
+        const targetDate = dateFilter === 'today' ? today : dateFilter
+        return dueDatePart === targetDate
+      })
+
+  // Step 1: completion filter
+  const afterFilter = afterDate.filter((todo) => {
     if (filter === 'active') return !todo.completed
     if (filter === 'completed') return !!todo.completed
     return true
@@ -49,15 +73,20 @@ export function TodoList({ initialTodos }: TodoListProps) {
     return sortOrder === 'due_asc' ? aDate - bDate : bDate - aDate
   })
 
-  const emptyMessage = trimmedQuery
-    ? `No todos match "${searchQuery}"`
-    : EMPTY_STATE_COPY[filter]
+  let emptyMessage: string
+  if (dateFilter !== null && afterDate.length === 0) {
+    emptyMessage = `No todos due ${formatDateLabel(dateFilter)}`
+  } else if (trimmedQuery) {
+    emptyMessage = `No todos match "${searchQuery}"`
+  } else {
+    emptyMessage = EMPTY_STATE_COPY[filter]
+  }
 
   if (filteredTodos.length === 0) {
     return (
       <LazyMotion features={domAnimation}>
         <m.div
-          key={filter + searchQuery}
+          key={filter + searchQuery + (dateFilter ?? '')}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 8 }}
@@ -75,7 +104,7 @@ export function TodoList({ initialTodos }: TodoListProps) {
 
   return (
     <LazyMotion features={domAnimation}>
-      <ul className="mt-4 flex flex-col gap-2">
+      <ul className="mt-4 flex flex-col gap-3">
         <AnimatePresence initial={false}>
           {filteredTodos.map((todo) => (
             <TodoItem key={todo.id} todo={todo} />

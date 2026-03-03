@@ -14,14 +14,14 @@ export function TodoProgress({ todos }: TodoProgressProps) {
   if (total === 0) return null
 
   return (
-    <div className="mt-3 mb-1">
-      <div className="flex justify-between items-center mb-1.5">
+    <div className="mt-4 mb-2">
+      <div className="flex justify-between items-center gap-2 mb-2">
         <span className="text-xs text-muted-foreground">Progress</span>
         <span className="text-xs font-medium text-muted-foreground tabular-nums">
           {completedCount} / {total}
         </span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+      <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
         {/* CSS transition used (not Framer Motion) to avoid LazyMotion scope issues in parent */}
         <div
           style={{

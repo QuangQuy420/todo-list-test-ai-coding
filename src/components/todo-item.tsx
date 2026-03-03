@@ -6,6 +6,7 @@ import { Pencil, Check, X, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateTimePicker } from '@/components/date-time-picker'
 import { useUIStore } from '@/store/ui'
 import { toggleTodo, updateTodo, deleteTodo } from '@/actions/todos'
 import type { Todo } from '@/lib/schema'
@@ -60,12 +61,19 @@ export function TodoItem({ todo }: TodoItemProps) {
   const { editingId, setEditingId } = useUIStore()
   const isEditing = editingId === todo.id
   const editInputRef = useRef<HTMLInputElement>(null)
-  const editDueDateRef = useRef<HTMLInputElement>(null)
+  const [editDueDate, setEditDueDate] = useState<string | null>(todo.due_date ?? null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [checkBounce, setCheckBounce] = useState(false)
 
   const isCompleted = !!todo.completed
   const dueDateClass = getDueDateClass(todo.due_date)
+
+  // Reset edit due date when entering edit mode
+  useEffect(() => {
+    if (isEditing) {
+      setEditDueDate(todo.due_date ?? null)
+    }
+  }, [isEditing, todo.due_date])
 
   // Focus edit input when entering edit mode
   useEffect(() => {
@@ -95,8 +103,7 @@ export function TodoItem({ todo }: TodoItemProps) {
       setEditingId(null)
       return
     }
-    const newDueDate = editDueDateRef.current?.value || undefined
-    await updateTodo(todo.id, newTitle, newDueDate)
+    await updateTodo(todo.id, newTitle, editDueDate ?? undefined)
     setEditingId(null)
   }
 
@@ -134,7 +141,7 @@ export function TodoItem({ todo }: TodoItemProps) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, x: -40, height: 0, marginTop: 0, marginBottom: 0 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="flex items-center gap-3 rounded-lg glass-surface border-l-4 px-4 py-3 shadow-xs transition-colors hover:bg-accent/5 focus-within:ring-1 focus-within:ring-ring/30 outline-none list-none"
+          className="flex items-start gap-3 rounded-lg glass-surface border-l-4 px-4 py-4 shadow-xs transition-colors hover:bg-accent/5 focus-within:ring-1 focus-within:ring-ring/30 outline-none list-none"
           style={{ borderLeftColor: getSpectrumColor(todo.id) }}
           tabIndex={0}
           onKeyDown={handleItemKeyDown}
@@ -144,7 +151,7 @@ export function TodoItem({ todo }: TodoItemProps) {
           <m.span
             animate={checkBounce ? { scale: [1, 1.4, 0.85, 1.1, 1] } : { scale: 1 }}
             transition={{ duration: 0.4, ease: 'easeInOut' }}
-            className="flex items-center"
+            className="flex items-center pt-0.5"
           >
             <Checkbox
               checked={isCompleted}
@@ -156,21 +163,18 @@ export function TodoItem({ todo }: TodoItemProps) {
           {/* Title / Edit Input */}
           <div className="flex-1 min-w-0">
             {isEditing ? (
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-col gap-3">
                 <Input
                   ref={editInputRef}
                   defaultValue={todo.title}
                   onKeyDown={handleEditKeyDown}
-                  className="h-7 py-0 text-sm flex-1 min-w-0"
+                  className="h-8 text-sm"
                   aria-label="Edit todo title"
                 />
-                <Input
-                  ref={editDueDateRef}
-                  type="datetime-local"
-                  defaultValue={todo.due_date ?? ''}
-                  onKeyDown={handleEditKeyDown}
-                  className="h-7 py-0 text-sm w-36 shrink-0"
-                  aria-label="Edit due date and time"
+                <DateTimePicker
+                  value={editDueDate}
+                  onChange={setEditDueDate}
+                  placeholder="Set due date (optional)"
                 />
               </div>
             ) : (
@@ -197,7 +201,7 @@ export function TodoItem({ todo }: TodoItemProps) {
 
             {/* Due date — hidden during edit mode */}
             {!isEditing && todo.due_date && (
-              <p className={cn('text-xs mt-0.5', dueDateClass || 'text-muted-foreground')}>
+              <p className={cn('text-xs mt-1', dueDateClass || 'text-muted-foreground')}>
                 Due: {formatDueDate(todo.due_date)}
               </p>
             )}
@@ -205,13 +209,13 @@ export function TodoItem({ todo }: TodoItemProps) {
 
           {/* Edit-mode save/cancel buttons */}
           {isEditing && (
-            <>
+            <div className="flex gap-1 mt-0.5 shrink-0">
               <Button
                 variant="ghost"
                 size="icon-sm"
                 onClick={handleEditSave}
                 aria-label="Save edit"
-                className="text-muted-foreground hover:text-green-500 shrink-0"
+                className="text-muted-foreground hover:text-green-500"
               >
                 <Check size={14} aria-hidden="true" />
               </Button>
@@ -220,11 +224,11 @@ export function TodoItem({ todo }: TodoItemProps) {
                 size="icon-sm"
                 onClick={handleEditCancel}
                 aria-label="Cancel edit"
-                className="text-muted-foreground hover:text-destructive shrink-0"
+                className="text-muted-foreground hover:text-destructive"
               >
                 <X size={14} aria-hidden="true" />
               </Button>
-            </>
+            </div>
           )}
 
           {/* Pencil trigger (enter edit mode) — hidden during edit */}

@@ -6,6 +6,7 @@ import { TodoList } from '@/components/todo-list'
 import { FilterTabs } from '@/components/filter-tabs'
 import { TodoProgress } from '@/components/todo-progress'
 import { SearchSortBar } from '@/components/search-sort-bar'
+import { DateFilterBar } from '@/components/date-filter-bar'
 
 export default async function Page() {
   const allTodos = await db.select().from(todos).orderBy(desc(todos.created_at))
@@ -15,6 +16,7 @@ export default async function Page() {
       <div className="w-full max-w-lg">
         <div className="backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 rounded-2xl p-6 shadow-2xl">
           <TodoForm />
+          <DateFilterBar todos={allTodos} />
           <SearchSortBar />
           <FilterTabs todos={allTodos} />
           <TodoProgress todos={allTodos} />

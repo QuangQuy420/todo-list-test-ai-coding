@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NavLinks } from "@/components/nav-links";
 import { CheckSquare } from "lucide-react";
 import "./globals.css";
 
@@ -23,6 +24,7 @@ export default function RootLayout({
               <CheckSquare className="size-5 text-accent-violet" aria-hidden="true" />
               <span className="text-sm font-semibold tracking-wide text-foreground">Todos</span>
             </div>
+            <NavLinks />
             <ThemeToggle />
           </header>
           <main>{children}</main>

@@ -30,7 +30,7 @@ export function SearchSortBar() {
   }
 
   return (
-    <div className="flex gap-2 items-center mt-3">
+    <div className="flex gap-3 items-center mt-4 mb-1">
       <div className="relative flex-1">
         <Search
           size={14}
